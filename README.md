@@ -273,4 +273,22 @@ q)3 {x,sum -2#x}\ 1 1
 ```
 
 **Summary:** with a two-argument function (`+/`), `/` folds across a list. With a one-argument function and a number on the left, `/` repeats the function that many times.
+
+### 1.14 FIFO Allocation
+
+Use up the oldest buys first. The trick: turn the buys into running totals (`sums`), cap them at the sell amount (`&` = min), then turn them back into amounts per buy (`deltas`).
+
+```q
+q)buys:2 1 4 3 5 4f
+q)deltas 12&sums buys                            / one sell of 12
+2 1 4 3 2 0f
+q)sells:2 4 3 2f
+q)deltas each deltas sums[sells] &\: sums[buys]  / several sells: rows=sells, cols=buys
+2 0 0 0 0 0
+0 1 3 0 0 0
+0 0 1 2 0 0
+0 0 0 1 1 0
+```
+
+- `&\:` (each-left) applies `&` with each item on the left, giving one row per sell.
 "# kdb_q_learning" 

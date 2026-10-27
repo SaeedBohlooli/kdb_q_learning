@@ -81,3 +81,9 @@ show sums 1 2 3 4 5      / 1 3 6 10 15
 show {x,sum -2#x}[1 1 2]       / 1 1 2 3
 show 10 {x,sum -2#x}/ 1 1      / 1 1 2 3 5 8 13 21 34 55 89 144
 show 3 {x,sum -2#x}\ 1 1       / every step
+
+/ 1.14 FIFO allocation: sums -> cap with & -> deltas
+buys:2 1 4 3 5 4f
+show deltas 12&sums buys                            / 2 1 4 3 2 0f
+sells:2 4 3 2f
+show deltas each deltas sums[sells] &\: sums[buys]  / rows=sells, cols=buys
