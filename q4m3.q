@@ -55,3 +55,24 @@ show -1#t          / last row
 / compare with drop _
 show 2_til 10      / 2 3 4 5 6 7 8 9
 show -2_til 10     / 0 1 2 3 4 5 6 7
+
+/ Functions: x y z are implicit params, last statement is the return value,
+/ assignments inside are local
+show {a:x*x;b:y*y;a+b}[3;4]   / 25
+show a                        / still 42 (global a unchanged)
+
+/ Over / : fold a two-argument function across a list using an accumulator
+show (+/) 1 2 3 4 5      / 15  (first item is the starting accumulator)
+show 0 +/ 1 2 3 4 5      / 15  (explicit initial accumulator)
+show +/[0;1 2 3 4 5]     / 15  (bracket form)
+show 10 +/ 1 2 3         / 16
+show (*/) 1+til 10       / 3628800 (10 factorial)
+show (|/) 20 10 40 30    / 40 (max)
+show (&/) 20 10 40 30    / 10 (min)
+show (,/) (1 2;3 4;5)    / 1 2 3 4 5 (raze)
+/ Scan \ : like Over but returns every intermediate accumulator value
+show (+\) 1 2 3 4 5      / 1 3 6 10 15
+show (*\) 1 2 3 4 5      / 1 2 6 24 120
+/ built-in equivalents
+show sum 1 2 3 4 5       / 15
+show sums 1 2 3 4 5      / 1 3 6 10 15

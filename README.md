@@ -165,4 +165,63 @@ q)2_til 10
 q)-2_til 10
 0 1 2 3 4 5 6 7
 ```
+
+### Functions (lambdas): `{...}[args]`
+
+```q
+q){a:x*x;b:y*y;a+b}[3;4]
+25
+```
+
+- `{...}` defines a function. Here it is called right away with the arguments in brackets, separated by `;`.
+- **Implicit parameters:** `x`, `y`, `z` are the first, second and third arguments. You don't need to declare them.
+- Statements inside the function are separated by `;`, and the **value of the last statement is returned**. No `return` keyword is needed.
+- `a` and `b` are **local** to the function. They don't overwrite a global `a` (for example the `a:42` set earlier).
+- Here: `a:3*3` → 9, `b:4*4` → 16, `a+b` → 25.
+
+### Over `/`: fold (accumulate) across a list
+
+`+` on its own works item by item. To **add up** a list, you need a higher-order function that turns `+` into something that runs across the list. In functional programming this is called a **fold**. In q it is **Over** (`/`).
+
+How it works: start with an initial value in an **accumulator**, then combine each item into the accumulator in turn. When the list runs out, the accumulator holds the result.
+
+```q
+q)(+/) 1 2 3 4 5        / ((((1+2)+3)+4)+5)
+15
+q)0 +/ 1 2 3 4 5        / explicit initial accumulator 0: (((((0+1)+2)+3)+4)+5)
+15
+q)+/[0;1 2 3 4 5]       / same, written with brackets
+15
+q)10 +/ 1 2 3           / initial value 10
+16
+```
+
+- `(+/)` without an initial value uses the **first item** as the starting accumulator.
+- Writing `(+/)` in parentheses makes it clear that `+/` is a single function.
+- **Gotcha:** `/` must come **right after** the function (`+/`). With a space or at the start of a line (` /`), `/` starts a **comment**.
+
+**Any two-argument function can be folded:**
+
+```q
+q)(*/) 1+til 10         / product: 10 factorial
+3628800
+q)(|/) 20 10 40 30      / | is max, so this is the largest item
+40
+q)(&/) 20 10 40 30      / & is min, so this is the smallest item
+10
+q)(,/) (1 2;3 4;5)      / join all the lists together
+1 2 3 4 5
+```
+
+**Scan `\` shows each step of the accumulator** (a running total):
+
+```q
+q)(+\) 1 2 3 4 5
+1 3 6 10 15
+q)(*\) 1 2 3 4 5
+1 2 6 24 120
+```
+
+- `/` returns only the **final** value. `\` returns **every intermediate** value.
+- q has built-in versions of the common ones: `sum`, `prd`, `max`, `min`, `raze` (= `,/`), `sums` (= `+\`), `prds` (= `*\`).
 "# kdb_q_learning" 
