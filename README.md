@@ -224,4 +224,53 @@ q)(*\) 1 2 3 4 5
 
 - `/` returns only the **final** value. `\` returns **every intermediate** value.
 - q has built-in versions of the common ones: `sum`, `prd`, `max`, `min`, `raze` (= `,/`), `sums` (= `+\`), `prds` (= `*\`).
+
+```q
+q)sum 1+til 10          / same as (+/): only the final total
+55
+q)sums 1+til 10         / same as (+\): running total at every step
+1 3 6 10 15 21 28 36 45 55
+```
+
+- The last item of `sums` always equals `sum`.
+
+### Repeat a function n times with `/`: Fibonacci
+
+The function on its own adds the next Fibonacci number to the end of the list:
+
+```q
+q){x,sum -2#x}[1 1 2]
+1 1 2 3
+```
+
+| Step | Expression | Result |
+|---|---|---|
+| 1 | `-2#x` | `1 2` (last 2 items) |
+| 2 | `sum -2#x` | `3` |
+| 3 | `x,sum -2#x` | `1 1 2 3` (put the sum on the end) |
+
+> **Note:** `x` is the input (the list so far). `sum -2#x` is only the next number. The **output** is `x,sum -2#x` (old list + new number), and it becomes the next `x`.
+
+Run it 10 times:
+
+```q
+q)10 {x,sum -2#x}/ 1 1
+1 1 2 3 5 8 13 21 34 55 89 144
+```
+
+- This is **not** a fold. The function takes **one** argument, so the number on the left (`10`) is **how many times to run it**, not a starting accumulator.
+- `n f/ x` means "apply `f` to `x`, `n` times, feeding each result back in".
+- It starts with 2 items and adds 1 each time, so the result has 12.
+
+Swap `/` for `\` to see each step:
+
+```q
+q)3 {x,sum -2#x}\ 1 1
+1 1
+1 1 2
+1 1 2 3
+1 1 2 3 5
+```
+
+**Summary:** with a two-argument function (`+/`), `/` folds across a list. With a one-argument function and a number on the left, `/` repeats the function that many times.
 "# kdb_q_learning" 

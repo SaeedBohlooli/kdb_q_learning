@@ -76,3 +76,8 @@ show (*\) 1 2 3 4 5      / 1 2 6 24 120
 / built-in equivalents
 show sum 1 2 3 4 5       / 15
 show sums 1 2 3 4 5      / 1 3 6 10 15
+
+/ n f/ x with a one-argument f: apply f n times (Fibonacci)
+show {x,sum -2#x}[1 1 2]       / 1 1 2 3
+show 10 {x,sum -2#x}/ 1 1      / 1 1 2 3 5 8 13 21 34 55 89 144
+show 3 {x,sum -2#x}\ 1 1       / every step
