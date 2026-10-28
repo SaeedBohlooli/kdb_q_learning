@@ -87,3 +87,14 @@ buys:2 1 4 3 5 4f
 show deltas 12&sums buys                            / 2 1 4 3 2 0f
 sells:2 4 3 2f
 show deltas each deltas sums[sells] &\: sums[buys]  / rows=sells, cols=buys
+
+/ Column dictionary: keys!values, values are same-length lists
+dc:`c1`c2!(10 20 30; 1.1 2.2 3.3)
+show dc
+show dc[`c1]       / 10 20 30
+show dc[`c2;1]     / 2.2
+show flip dc       / column dictionary -> table
+
+/ Random dates: n?m = n random ints in 0..m-1; date+n = n days later
+dts:2015.01.01+1000000?31
+show 5#dts         / random dates in Jan 2015

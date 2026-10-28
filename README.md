@@ -302,4 +302,54 @@ deltas           → 0 1 3 0 0 0     amount per buy     ← deltas each (across 
 ```
 
 - `deltas` on a matrix subtracts whole rows (down). `deltas each` works inside each row (across).
+
+### Column dictionary → table
+
+```q
+q)dc:`c1`c2!(10 20 30; 1.1 2.2 3.3)
+q)dc
+c1| 10  20  30
+c2| 1.1 2.2 3.3
+q)dc[`c1]              / look up a key → the whole column
+10 20 30
+q)dc[`c2;1]            / key, then index → one value
+2.2
+q)flip dc              / flip a column dictionary → a table
+c1 c2
+------
+10 1.1
+20 2.2
+30 3.3
+```
+
+- `keys!values` makes a dictionary. Here the keys are the symbols `` `c1`c2 `` and the values are 2 lists of the same length.
+- A dictionary whose values are same-length lists is a **column dictionary**. `flip` turns it into a **table**, which is how q stores tables.
+
+### Random dates
+
+```q
+q)dts:2015.01.01+1000000?31
+```
+
+- `n?m` gives `n` random integers from `0` to `m-1` (`5?31` → e.g. `12 3 27 0 19`).
+- `date+n` moves forward `n` days (a date is stored as days since 2000.01.01). The result is 1 million random dates in January 2015.
+
+### Sort a table: `xasc`
+
+```q
+q)trades:`dt`tm xasc trades
+```
+
+- Sorts the table ascending by `dt`, then by `tm` for rows with the same date, and saves the result back to `trades`. `xasc` doesn't change the table in place.
+- `xdesc` sorts descending. `xasc` also gives the first sort column the sorted attribute (`s`), which makes searches on it faster.
+
+### qSQL `select` with aggregates and `by`
+
+```q
+q)select avg px, avg vol from trades          / one row: averages over the whole table
+q)select avg px, avg vol by sym from trades   / one row per sym (a keyed table)
+```
+
+- `avg px` gives a result column that is still named `px`.
+- `by sym` groups the rows by `sym` and calculates the averages for each group. `sym` becomes the key column, shown to the left of the `|`.
 "# kdb_q_learning" 
