@@ -291,4 +291,15 @@ q)deltas each deltas sums[sells] &\: sums[buys]  / several sells: rows=sells, co
 ```
 
 - `&\:` (each-left) applies `&` with each item on the left, giving one row per sell.
+
+**Walkthrough, following sell 2 (amount 4).** `sums sells` = `2 6 9 11`, so after sell 2, **6** units have been sold in total.
+
+```
+6&sums buys      → 2 3 6 6 6 6     sells 1 and 2 together (running totals)
+2&sums buys      → 2 2 2 2 2 2     sell 1 alone
+subtract         → 0 1 4 4 4 4     sell 2 only        ← deltas (down the rows)
+deltas           → 0 1 3 0 0 0     amount per buy     ← deltas each (across each row)
+```
+
+- `deltas` on a matrix subtracts whole rows (down). `deltas each` works inside each row (across).
 "# kdb_q_learning" 
