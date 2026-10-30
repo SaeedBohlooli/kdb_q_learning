@@ -352,4 +352,167 @@ q)select avg px, avg vol by sym from trades   / one row per sym (a keyed table)
 
 - `avg px` gives a result column that is still named `px`.
 - `by sym` groups the rows by `sym` and calculates the averages for each group. `sym` becomes the key column, shown to the left of the `|`.
+
+### VWAP by time bucket: `wavg` and `xbar`
+
+```q
+q)select vwap:vol wavg px by sym,bkt:100000000 xbar tm from trades
+```
+
+- Gives the VWAP (volume-weighted average price) for each `sym` and each 100 ms time bucket.
+- `name:expr` names a result column (`vwap`, `bkt`).
+
+**`w wavg x`**: weighted average, `sum[w*x] % sum w`
+
+```q
+q)1 1 1 wavg 10 20 30          / equal weights = ordinary avg
+20f
+q)100 300 wavg 10 11           / (100*10 + 300*11) % 400
+10.75
+```
+
+**`n xbar x`**: round down to a multiple of `n` (puts each value in a bucket)
+
+```q
+q)5 xbar 0 3 5 7 11
+0 0 5 5 10
+q)15 xbar 09:07 09:20 09:44    / minute type: 15-minute buckets
+09:00 09:15 09:30
+```
+
+- `tm` is a timespan, counted in nanoseconds, so `100000000 xbar tm` makes 100 ms buckets.
+
+### Max profit (one buy, then one later sell): `mins`
+
+```q
+q)select max px-mins px from trades where sym=`aapl
+```
+
+`max-min` is wrong, because the high might come **before** the low. Instead, for each possible sell day, look back for the cheapest buy so far:
+
+```q
+q)px:15 10 12 8 11 9
+q)mins px              / running minimum = best buy so far
+15 10 10 8 8 8
+q)px-mins px           / profit if I sell today
+0 0 2 0 3 1
+q)max px-mins px       / buy 8, sell 11 (not 15-8: the 15 came first)
+3
+```
+
+- Max drawdown (the worst fall from a high): `max (maxs px)-px` → `7` here.
+
+### Saving and loading files: `set`/`get`, `0:`, `read0`
+
+```q
+q)t:([] c1:`a`b`c; c2:1.1 2.2 3.3)
+```
+
+A symbol starting with `:` is a **file handle**: `` `:/q4m/examples/t ``. On Windows, `/q4m/...` means the current drive, e.g. `C:\q4m\...`.
+
+**Binary save and load:** fast, and keeps the types
+
+```q
+q)`:/q4m/examples/t set t        / save; returns the handle
+`:/q4m/examples/t
+q)get `:/q4m/examples/t          / load the same table back
+c1 c2
+------
+a  1.1
+b  2.2
+c  3.3
+```
+
+**Save as CSV:** the two `0:`s do different jobs (read right to left)
+
+```q
+q)csv 0: t                       / step 1: table → CSV text lines (csv is just ",")
+"c1,c2"
+"a,1.1"
+"b,2.2"
+"c,3.3"
+q)`:/q4m/examples/t.csv 0: csv 0: t   / step 2: write the lines to a file
+```
+
+**Read raw lines:** no parsing
+
+```q
+q)read0 `:/q4m/examples/t.csv
+"c1,c2"
+"a,1.1"
+"b,2.2"
+"c,3.3"
+```
+
+**Parse the CSV back into a table:**
+
+```q
+q)("SF"; enlist ",") 0: `:/q4m/examples/t.csv
+c1 c2
+------
+a  1.1
+b  2.2
+c  3.3
+```
+
+- `"SF"` gives one type letter per column: `S` symbol, `F` float. Others: `I` int, `J` long, `D` date, `T` time, `*` string, a space to skip a column.
+- `enlist ","` means the first line is the header, so the result is a table. With a plain `","`, every line is read as data and you get a list of columns.
+- CSV doesn't store types, which is why you supply them when reading.
+
+| Command | Does |
+|---|---|
+| `` `:f set t `` / `` get `:f `` | binary save / load |
+| `` `:f.csv 0: csv 0: t `` | table → CSV text → file |
+| `` read0 `:f `` | file → raw lines |
+| `` ("SF";enlist ",") 0: `:f `` | CSV file → table |
+
+### IPC: talking to another q process
+
+```q
+/ server session
+q)\p 5042                     / listen on port 5042
+q)\p                          / check the port
+5042i
+q)f:{x*y}                     / a function clients can call
+
+/ client session
+q)h:hopen `:localhost:5042    / open a connection (`:host:port), h = handle
+q)h "6*7"                     / send a string to run on the server (dev only, unsafe)
+42
+q)h (`f; 6; 7)                / call server function f by name with arguments (safer)
+42
+q)hclose h                    / close the connection
+```
+
+**Async call: `neg h`** (send and don't wait)
+
+```q
+q)echo:{show x}               / server: prints its argument
+q)(neg h) (`echo; 42)         / client: returns at once, nothing comes back
+42                            / ...printed on the SERVER console
+```
+
+- `h (...)` is sync: the client waits and gets the result. `(neg h) (...)` is async: no waiting, and no result comes back.
+
+### Callbacks: the server calls the client back
+
+The client sends the work plus the name of its own function. The server does the work, then calls that function on the client with the result.
+
+```q
+/ server
+q)rsvp:{[arg;cb] show arg; (neg .z.w) (cb; 43); show `done;}
+
+/ client
+q)echo:{show x}                    / the function the server will call back
+q)(neg h) (`rsvp; 42; `echo)       / server fn, its arg, callback name
+q)43                               / printed on the client by echo
+
+/ server console shows: 42 then `done
+```
+
+- `{[arg;cb] ...}` uses **named parameters** in place of `x` and `y`.
+- `.z.w` is the handle of **who called** (the connection back to the client). It's set during each remote call.
+- `(neg .z.w) (cb; 43)` asynchronously calls `` `echo `` on the client with `43`.
+- The `;` at the end of the function makes it return nothing locally. The result was already sent back.
+- The client **must** call asynchronously (`neg h`). If it used sync `h`, it would block waiting for `rsvp`, `rsvp` would be trying to call the client, and the two would **deadlock**.
 "# kdb_q_learning" 

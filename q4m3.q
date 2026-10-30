@@ -98,3 +98,47 @@ show flip dc       / column dictionary -> table
 / Random dates: n?m = n random ints in 0..m-1; date+n = n days later
 dts:2015.01.01+1000000?31
 show 5#dts         / random dates in Jan 2015
+
+/ wavg: weighted average sum[w*x] % sum w
+show 1 1 1 wavg 10 20 30       / 20f
+show 100 300 wavg 10 11        / 10.75
+/ xbar: round down to a multiple of n (bucketing)
+show 5 xbar 0 3 5 7 11         / 0 0 5 5 10
+show 15 xbar 09:07 09:20 09:44 / 09:00 09:15 09:30
+
+/ Max profit (buy before sell): px - running min, then max
+px:15 10 12 8 11 9
+show mins px                   / 15 10 10 8 8 8
+show px-mins px                / 0 0 2 0 3 1
+show max px-mins px            / 3 (buy 8, sell 11)
+show max (maxs px)-px          / 7 (max drawdown)
+
+/ Files: `:path is a file handle
+/ (relative paths here so loading this script writes under ./q4m/examples, not the drive root)
+t:([] c1:`a`b`c; c2:1.1 2.2 3.3)
+/ binary save / load (keeps types)
+`:q4m/examples/t set t
+show get `:q4m/examples/t
+/ table -> CSV text lines -> file
+show csv 0: t                          / "c1,c2" "a,1.1" ...
+`:q4m/examples/t.csv 0: csv 0: t
+/ read raw lines
+show read0 `:q4m/examples/t.csv
+/ parse CSV: "SF" = symbol,float; enlist "," = first line is header -> table
+show ("SF"; enlist ",") 0: `:q4m/examples/t.csv
+
+/ IPC: needs two q sessions, so commented out (run by hand)
+/ server:  \p 5042          / listen on port 5042
+/ server:  f:{x*y}
+/ client:  h:hopen `:localhost:5042
+/ client:  h "6*7"          / 42  run a string on the server (dev only)
+/ client:  h (`f; 6; 7)     / 42  call f by name (safer)
+/ async (neg h): client doesn't wait, nothing returned; output shows on server
+/ server:  echo:{show x}
+/ client:  (neg h) (`echo; 42)   / server console prints 42
+/ callback: server calls a client function back via .z.w (handle of the caller)
+/ server:  rsvp:{[arg;cb] show arg; (neg .z.w) (cb; 43); show `done;}
+/ client:  echo:{show x}
+/ client:  (neg h) (`rsvp; 42; `echo)   / client prints 43; server prints 42, `done
+/          must be async (neg h), sync h would deadlock
+/ client:  hclose h
