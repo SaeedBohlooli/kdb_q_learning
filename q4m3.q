@@ -141,4 +141,24 @@ show ("SF"; enlist ",") 0: `:q4m/examples/t.csv
 / client:  echo:{show x}
 / client:  (neg h) (`rsvp; 42; `echo)   / client prints 43; server prints 42, `done
 /          must be async (neg h), sync h would deadlock
+
+/ Symbols: `name is the name as data; name alone is a variable lookup
+show `apple`banana             / symbol list
+show type `apple               / -11h
+show string `apple             / "apple"
+show `$"hello world"           / `hello world
+show cols t                    / `c1`c2 (column names)
+d:`a`b`c!1 2 3
+show d `b                      / 2 (dictionary key)
+show `int$12:00:00.000         / 43200000i (type name in a cast)
+show (enlist `c1)#t            / take one column (`c1#t would be an attribute)
+show get `a                    / read variable a by name
+`a set 100                     / set variable a by name
+show a                         / 100
+
+/ Timestamp (point in time, -12h) vs timespan (duration, -16h); both in nanoseconds
+show type 2015.01.01D09:30:00.000000000   / -12h
+show type 0D09:30:00.000000000            / -16h
+show 2015.01.02D10:00 - 2015.01.01D09:00  / 1D01:00:00.000000000
+show 2015.01.01 + 0D09:30                 / 2015.01.01D09:30:00.000000000
 / client:  hclose h

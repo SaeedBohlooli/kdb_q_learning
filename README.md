@@ -515,4 +515,855 @@ q)43                               / printed on the client by echo
 - `(neg .z.w) (cb; 43)` asynchronously calls `` `echo `` on the client with `43`.
 - The `;` at the end of the function makes it return nothing locally. The result was already sent back.
 - The client **must** call asynchronously (`neg h`). If it used sync `h`, it would block waiting for `rsvp`, `rsvp` would be trying to call the client, and the two would **deadlock**.
+
+### Symbols: the backtick `` ` ``
+
+A backtick makes a **symbol**: a name used as data. `apple` is the variable apple (q looks up its value), while `` `apple `` is the name itself.
+
+```q
+q)`apple`banana            / symbol list (no spaces); type 11h, a single one is -11h
+q)`                        / the empty (null) symbol
+q)string `apple            / symbol → string
+"apple"
+q)`$"hello world"          / string → symbol
+`hello world
+```
+
+Where you'll see it:
+
+```q
+q)select from trades where sym=`aapl   / values in data
+q)`dt`tm xasc trades                   / column names
+q)cols t                               / → `c1`c2
+q)d:`a`b`c!1 2 3; d `b                 / dictionary keys → 2
+q)`int$12:00:00.000                    / type names in casts → 43200000i
+q)`:q4m/examples/t set t               / file handle (`: prefix)
+q)h:hopen `:localhost:5042             / network handle
+q)h (`f; 6; 7)                         / function name for a remote call
+q)get `a                               / variable name: read a
+q)`a set 100                           / variable name: set a
+```
+
+- **Gotcha:** a single symbol directly before `#` is read as an **attribute**: `` `s#t `` marks `t` as sorted, it doesn't take column `s`. To take one column, use `` (enlist `c1)#t ``.
+
+### Timestamp vs timespan
+
+```q
+q)2015.01.01D09:30:00.000000000    / timestamp (-12h): a point in time, ns since 2000.01.01
+q)0D09:30:00.000000000             / timespan (-16h): a duration or time of day, in ns
+q)2015.01.02D10:00 - 2015.01.01D09:00   / timestamp − timestamp = timespan
+1D01:00:00.000000000
+q)2015.01.01 + 0D09:30             / date + timespan = timestamp
+2015.01.01D09:30:00.000000000
+```
+
+- A date before the `D` makes a timestamp; a number of days before it makes a timespan. Now: `.z.p` (timestamp), `.z.n` (timespan).
+
+### Getting parts of a date: `` `month$dt `` and friends
+
+`` `month$dt `` = cast `dt` to the type named `` `month ``. The backtick makes `month` a name used as data, like `cast("month", dt)` in Python or `cast(Type.MONTH, dt)` in Java. Without it, q looks for a variable called `month`.
+
+```q
+q)dt:2014.01.01
+q)`month$dt          / month value (type -13h), day removed
+2014.01m
+q)`int$2014.01m      / stored as months since 2000.01
+168i
+q)`month$2014.01.01 2014.01.31 2014.02.15   / any day in a month → same month
+2014.01 2014.01 2014.02m
+```
+
+| Cast | Result | Meaning |
+|---|---|---|
+| `` `month$dt `` | `2014.01m` | month **value** |
+| `` `year$dt `` | `2014i` | year number |
+| `` `mm$dt `` | `1i` | month **number** (1 to 12) |
+| `` `dd$dt `` | `1i` | day of the month |
+| `` `week$dt `` | `2013.12.30` | Monday of that week |
+
+```q
+q)dt.year            / dot shortcut on a variable holding a date
+2014i
+q)dt.month
+2014.01m
+q)select sum vol by `month$dt from trades   / group by month
+```
+
+- `` `month$dt `` gives a month **value** (`2014.01m`). `` `mm$dt `` gives just the **number** (`1i`).
+- Like dates and times, a month is a count underneath (months since 2000.01), shown in a readable form.
+
+## 2. Basic Data Types: Atoms
+
+An **atom** is a single value of one type. A negative `type` means an atom, and a positive `type` means a list of that type.
+
+### Type table (the ones to remember)
+
+| Type | Char | Num | Example | Null | Java |
+|---|---|---|---|---|---|
+| boolean | b | 1 | `1b` | `0b` | boolean |
+| guid | g | 2 | (generated) | `0Ng` | UUID |
+| byte | x | 4 | `0x2a` | `0x00` | byte |
+| short | h | 5 | `42h` | `0Nh` | short |
+| int | i | 6 | `42i` | `0Ni` | int |
+| **long** | j | 7 | `42` | `0N` | long |
+| real | e | 8 | `4.2e` | `0Ne` | float |
+| **float** | f | 9 | `4.2` | `0n` | double |
+| char | c | 10 | `"z"` | `" "` | char |
+| **symbol** | s | 11 | `` `zaphod `` | `` ` `` | String (interned) |
+| **timestamp** | p | 12 | `2015.01.01D09:30:00.000000000` | `0Np` | Instant |
+| month | m | 13 | `2006.07m` | `0Nm` | |
+| **date** | d | 14 | `2006.07.21` | `0Nd` | LocalDate |
+| datetime (deprecated) | z | 15 | `2006.07.21T09:13:39` | `0Nz` | |
+| **timespan** | n | 16 | `0D12:00:00.000000000` | `0Nn` | Duration |
+| minute | u | 17 | `23:59` | `0Nu` | |
+| second | v | 18 | `23:59:59` | `0Nv` | |
+| time | t | 19 | `09:01:02.042` | `0Nt` | LocalTime (ms) |
+| table / dict / function | | 98 / 99 / 100 | | | |
+
+- The **Char** letter is used in casts and parsing (`"D"$"2015.01.01"`, CSV `"SF"`) and in `meta` output. It's also the literal suffix (`42h`, `42i`, `1b`).
+- Type names like `int` and `date` aren't reserved words, but don't use them as variable names.
+
+### Integers: long (default), int, short
+
+```q
+q)42          / long (8 bytes); 42j is the same
+42
+q)-123h       / short (2 bytes): h is required
+-123h
+q)1234567890i / int (4 bytes): i is required
+1234567890i
+```
+
+- Arithmetic **promotes** automatically (`1h+1` → long). But adding a narrower value to a list of a wider type **in place** is an error, not a promotion. This keeps table columns a single type.
+
+### Floats: float (default) and real
+
+```q
+q)3.14159265  / float (8 bytes, about 15 digits); display rounds to 7
+3.141593
+q)1.0         / shown without the .0
+1f
+q)1.234e7     / scientific notation: here e is the exponent, not a type
+1.234e+07
+q)12.34e      / real (4 bytes, about 6 digits): avoid it, always use float
+12.34e
+q)\P 16       / show up to 16 digits (\P 0 = all 17)
+```
+
+### Binary: boolean, byte, guid
+
+```q
+q)42+1b       / booleans are numbers in arithmetic
+43
+q)base:100; flag:1b
+q)base+flag*42   / no if needed: adds 42 only when flag is 1b
+142
+q)0x2a        / byte: 0x followed by 2 hex digits
+0x2a
+q)1+0x29
+42
+q)-2?0Ng      / 2 new GUIDs (negative = random seed; use this in production)
+q)"G"$"61f35174-90bc-a48a-d88f-e15e4a377ec8"   / parse a GUID string
+```
+
+- There are no `true`/`false` keywords: use `1b` and `0b`.
+- `2?0Ng` (positive) gives the **same** GUIDs in every new session, which is useful for tests only.
+
+### Text: char vs symbol
+
+```q
+q)"q"         / char: one character
+q)"\""        / escapes: \" \\ \n \r \t, and \142 = octal for "b"
+q)`zaphod     / symbol: one atomic piece of text
+q)`a~"a"      / a symbol is NOT a char or a string
+0b
+q)`$"A symbol with blanks"   / make any symbol by casting a string
+```
+
+- `~` is **match** (identical in type and value).
+- You can't get at the characters inside a symbol. A string is a **list of chars** (chapter 3).
+
+### Temporal types: all integer counts from 2000.01.01 or midnight
+
+| Type | Literal | Counts | Since |
+|---|---|---|---|
+| date | `2015.01.01` | days | 2000.01.01 |
+| month | `2015.01m` | months | 2000.01 |
+| timestamp | `2015.01.01D12:00:00.000000000` | nanoseconds | 2000.01.01 |
+| time | `12:00:00.000` | milliseconds | midnight |
+| timespan | `12:00:00.000000000` (optional `0D`) | nanoseconds | midnight |
+| minute | `12:00` | minutes | midnight |
+| second | `12:00:00` | seconds | midnight |
+
+```q
+q)2000.01.01=0                  / dates are day counts
+1b
+q)`int$2000.02.01
+31i
+q)2015.1.1                      / leading zeros are required
+'2015.1.1
+q)12:00:00.000=12*60*60*1000    / time = milliseconds
+1b
+q)`long$12:34:56.123456789      / timespan = nanoseconds
+45296123456789
+q)`long$2014.11.22D17:43:40.123456789
+469993420123456789
+q)`date$2014.11.22D17:43:40.123456789       / split a timestamp
+2014.11.22
+q)`timespan$2014.11.22D17:43:40.123456789
+0D17:43:40.123456789
+q)`int$2015.01m
+180i
+q)2014.11                       / GOTCHA: without m this is a float!
+2014.11
+q)2015.07m=2015.07.01           / the first day of a month equals the month
+1b
+q)12:34:56=12:34:56.000         / different units, same clock position → equal
+1b
+```
+
+- **datetime** (`T`, stored as a fractional float day count) is deprecated. Use **timestamp** (`D`), especially for keys and joins.
+- Extract parts with a cast (`` `mm$dt ``, `` `dd$dt ``, `` `month$dt ``) instead of dot notation (`dt.mm`), which doesn't work inside functions.
+- To get the milliseconds of a time: `` (`int$12:34:56.789) mod 1000 `` → `789`.
+
+### Infinities: no division-by-zero errors
+
+| Literal | Meaning |
+|---|---|
+| `0w` / `-0w` | float +/- infinity |
+| `0n` | float null (NaN) |
+| `0W` / `-0W` | long +/- infinity |
+| `0N` | long null |
+
+```q
+q)1%0         / % is divide, and it always returns a float
+0w
+q)-1%0
+-0w
+q)0%0
+0n
+q)42<0W       / integer infinities are for comparisons
+1b
+q)0W+1        / GOTCHA: integer overflow isn't trapped; it wraps around
+0N
+```
+
+- q prefers returning a result over raising an error, so a long calculation doesn't stop partway.
+- Order for longs: `0N < -0W < normal values < 0W`. `0N` is the smallest long bit pattern.
+
+### Nulls: typed, and always tested with `null`
+
+- Each type has its **own** null (`0N`, `0n`, `0Nd`, `` ` ``, ...), the same size as a normal value. There's no single `NULL` like in SQL or Java.
+- boolean, byte and char have **no real null**. `0b`, `0x00` and `" "` stand in for it, so you can't tell "missing" from false, 0 or a blank.
+- `""` is an **empty string** (an empty list of chars), not a null char.
+
+```q
+q)null 42
+0b
+q)null 0N
+1b
+q)null `
+1b
+q)null " "
+1b
+```
+
+- **Always use `null`** rather than `= 0N`. It works for any type, so you don't need the right null literal.
+
+## 3. Lists
+
+Everything in q is built from lists: a dictionary is a pair of lists, a table is a special dictionary, and a keyed table is a pair of tables. Think of q lists as **dynamic arrays**, not linked lists: they're contiguous in memory, you append at the end, and indexing is fast.
+
+- **Simple list** = all atoms of one type (a vector): the fastest kind, with compact storage.
+- **General list** = anything else (mixed types or nested lists), `type` `0h`.
+
+### 3.1 Defining lists, `count`, `first`, `last`
+
+General notation: items in `( )` separated by `;`.
+
+```q
+q)(1; 1.1; `1)                        / mixed → general list, one item per line
+1
+1.1
+`1
+q)(1;2;3)                             / all longs → shown as a simple list
+1 2 3
+q)("a";"b";"c";"d")
+"abcd"
+q)(`Life;`the;`Universe;`and;`Everything)
+`Life`the`Universe`and`Everything
+q)(-10.0; 3.1415e; 1b; `abc; "z")
+-10f
+3.1415e
+1b
+`abc
+"z"
+q)((1; 2; 3); (4; 5))                 / nested
+1 2 3
+4 5
+q)((1; 2; 3); (`1; "2"; 3); 4.4)
+1 2 3
+(`1;"2";3)
+4.4
+q)L1:(1;2;3)
+q)L2:("z";"a";"p";"h";"o";"d")
+q)L3:((1; 2; 3); (`1; "2"; 3); 4.4)
+q)count L1
+3
+q)count 42              / an atom has count 1 (but it isn't a list)
+1
+q)count `zaphod
+1
+q)first (1; 2; 3)
+1
+q)last (1; 2; 3)
+3
+```
+
+- Lists are **ordered**: `(1;2)` and `(2;1)` are different. SQL tables are unordered sets; q tables keep their order, which makes time series natural.
+
+### 3.2 Simple lists: shorter notation per type
+
+q **automatically converts** a general list to a simple list when all items are atoms of the same type.
+
+```q
+q)(100;200;300)
+100 200 300
+q)100 200 300~(100; 200 ; 300)        / ~ = match (identical)
+1b
+q)(1h; 2h; 3h)                        / the suffix applies to the WHOLE list
+1 2 3h
+q)(100i; 200i; 300i)
+100 200 300i
+q)(1; 2; 3h)                          / mixed long/short → general
+1
+2
+3h
+```
+
+**Floats**
+
+```q
+q)123.4567 9876.543 99
+123.4567 9876.543 99
+q)1.0 2.0 3.0                         / whole floats shown with a trailing f
+1 2 3f
+q)1 2 3f~1.0 2.0 3.0
+1b
+q)1.1 2 3.3~1.1 2.0 3.3               / an integer among floats is read as a float
+1b
+```
+
+**Booleans, bytes, GUIDs**
+
+```q
+q)(0b;1b;0b;1b;1b)                    / booleans: digits with no spaces, then b
+01011b
+q)(0x20;0xa1;0xff)                    / bytes: one 0x, then the hex digits
+0x20a1ff
+q)0x20a1ff~(0x20;0xa1;0xff)
+1b
+q)3?0Ng                               / GUIDs: separated by spaces
+```
+
+- A boolean list uses **1 byte per item**. It is not packed into bits.
+
+**Symbols**: no spaces between them
+
+```q
+q)`Life`the`Universe`and`Everything
+`Life`the`Universe`and`Everything
+q)`bad `news                          / spaces → error
+'bad
+```
+
+**Strings = lists of chars**
+
+```q
+q)("s"; "t"; "r"; "i"; "n"; "g")
+"string"
+q)"string"="text"                     / = compares item by item → lengths must match
+'length
+q)"string"~"text"                     / ~ compares whole values
+0b
+```
+
+**Temporal lists**: separated by spaces. When you mix temporal types, q converts them all to **one type** instead of making a general list (unlike numbers).
+
+```q
+q)(2000.01.01; 2001.01.01; 2002.01.01)
+2000.01.01 2001.01.01 2002.01.01
+q)(00:00:00.000; 00:00:01.000; 00:00:02.000)
+00:00:00.000 00:00:01.000 00:00:02.000
+q)12:34 01:02:03                      / minute + second → all seconds
+12:34:00 01:02:03
+q)01:02:03 12:34
+01:02:03 12:34:00
+q)01:02:03 12:34 11:59:59.999u        / a suffix forces the type (u = minute)
+01:02 12:34 11:59
+```
+
+### 3.3 Empty and singleton lists
+
+```q
+q)()                                  / general empty list: prints nothing
+q)L:()
+q).Q.s1 L                             / .Q.s1 = any value → one-line string (shows hidden values)
+"()"
+q)enlist 42                           / a singleton: you can't write (42), that's just 42
+,42
+q)"a"                                 / a char atom, NOT a 1-char string
+"a"
+q)enlist "a"                          / a 1-char string
+,"a"
+q)enlist 1 2 3                        / a singleton holding a list (display is confusing)
+1 2 3
+q)enlist (10 20 30; `a`b`c)
+10 20 30 a b c
+```
+
+- `,` in the display means a **1-item list**. You can't type `,42` in q to make one; use `enlist`.
+
+### 3.4 Indexing
+
+Indices run from `0` to `count-1`. There is **no item at index `count`**, which is a common mistake.
+
+```q
+q)(100; 200; 300)[0]
+100
+q)100 200 300[0]
+100
+q)L:100 200 300
+q)L[1]
+200
+q)L[2]
+300
+q)L[3]                                / out of range → null, NOT an error
+0N
+```
+
+**Indexed assignment**: the type must match exactly in a simple list
+
+```q
+q)L:1 2 3
+q)L[1]:42
+q)L
+1 42 3
+q)L:100 200 300
+q)L[1]:42h                            / short into a long list: no promotion
+'type
+```
+
+**Index domain**: a wrong index type is an error; out of range gives the null of item 0's type
+
+```q
+q)L:(-10.0; 3.1415e; 1b; `abc; "z")
+q)L[1.0]
+'type
+q)L1:1 2 3 4
+q)L1[4]                               / index = count → out of range
+0N
+q)L2:1.1 2.2 3.3
+q)L2[-1]
+0n
+q)L3:(`1; 2; 3.3)
+q)L3[0W]                              / null of item 0's type (symbol)
+`
+```
+
+**Empty index and `::` (the nil item)**
+
+```q
+q)L:10 20 30 40
+q)L[]                                 / no index → the whole list
+10 20 30 40
+q).Q.s1 L[()]                         / an empty-list index → an empty list
+"()"
+q)L[::]                               / :: = an explicit "all"
+10 20 30 40
+```
+
+**Using `::` to keep a list general**
+
+```q
+q)L:(::; 1 ; 2 ; 3)
+q)type L
+0h
+q).Q.s1 L[0]
+"::"
+q)L:(1; 2; 3; `a)
+q)L[3]:4                              / now all longs → q converts it to a simple list
+q)L
+1 2 3 4
+q)L[3]:`a                             / can't put the symbol back
+'type
+q)L:(::; 1 ; 2 ; 3; `a)               / with :: as a guard
+q)L[4]:4
+q)L[4]:`a                             / works
+```
+
+- The drawback: don't pass the `::` on to calculations that use the real data.
+
+**Expressions inside lists**
+
+```q
+q)a:42
+q)b:43
+q)(a; b)
+42 43
+q)L1:1 2 3
+q)L2:40 50
+q)(L1; L2)
+1 2 3
+40 50
+q)(count L1; sum L2)
+3 90
+q)a b                                 / no shorthand list of variables: this means "apply a to b"
+': Bad file descriptor
+```
+
+### 3.5 Combining lists
+
+**Join `,`**
+
+```q
+q)1 2 3,4 5
+1 2 3 4 5
+q)1,2 3 4                             / atoms are fine on either side
+1 2 3 4
+q)1 2 3,4
+1 2 3 4
+q)1 2 3,4.4 5.5                       / mixed types → general list
+1
+2
+3
+4.4
+5.5
+```
+
+- **Idiom:** `(),x` or `x,()` makes sure `x` is a list. It wraps an atom and leaves a list unchanged. `enlist x` wouldn't work: it would **nest** a list that's already a list.
+
+**Coalesce `^`**: the right item wins, unless it's null
+
+```q
+q)L1:10 0N 30
+q)L2:100 200 0N
+q)L1^L2
+100 200 30
+```
+
+### 3.6 Lists as maps
+
+A list is a **function from index → item**: `i → L[i]`. Indexing looks just like calling a function. Out-of-range indices map to null.
+
+```
+101 102 103 104          (`a; 123.45; 1b)         (1 2; 3 4)
+0 → 101                  0 → `a                   0 → 1 2
+1 → 102                  1 → 123.45               1 → 3 4
+2 → 103                  2 → 1b
+3 → 104
+```
+
+### 3.7 Nesting and depth
+
+**Depth** = how many index steps it takes to reach atoms. An atom has depth 0, a simple list 1, a list of lists 2.
+
+```q
+q)L:(1;2;(100;200))
+q)count L
+3
+q)L:(1;2;100 200)
+q)L
+1
+2
+100 200
+q)L[0]
+1
+q)L[1]
+2
+q)L[2]
+100 200
+q)L2:((1;2;3);(`ab;`c))
+q)count L2
+2
+q)L3:((1; 2h; 3j); ("a"; `bc`de); 1.23)
+q)count L3
+3
+q)L3[1]
+"a"
+`bc`de
+q)count L3[1]
+2
+q)L4:enlist 1 2 3 4
+q)count L4
+1
+q)count L4[0]
+4
+q)m:((11; 12; 13; 14); (21; 22; 23; 24); (31; 32; 33; 34))
+q)m
+11 12 13 14
+21 22 23 24
+31 32 33 34
+q)m[0]
+11 12 13 14
+q)m[1]
+21 22 23 24
+q)m[1][0]
+21
+```
+
+### 3.8 Iterated indexing vs indexing at depth
+
+```q
+q)L:(1; (100; 200; (1000; 2000; 3000; 4000)))
+q)L[0]
+1
+q)L[1]
+100
+200
+1000 2000 3000 4000
+q)L[1][2]                             / iterated: index the result again
+1000 2000 3000 4000
+q)L[1][2][0]
+1000
+q)L[1;2;0]                            / at depth: the same thing, one bracket with ;
+1000
+```
+
+**Assignment only works with the at-depth form**
+
+```q
+q)L:(1; (100; 200; (1000 2000 3000 4000)))
+q)L[1; 2; 0]: 999
+q)L
+1
+(100;200;999 2000 3000 4000)
+q)L[1][2][0]:42                       / the intermediate results are temporary
+'assign
+```
+
+```q
+q)m:((11; 12; 13; 14); (21; 22; 23; 24); (31; 32; 33; 34))
+q)m[0][0]
+11
+q)m[0; 0]
+11
+q)m[0; 1]
+12
+q)m[1; 2]
+23
+```
+
+- The `;` in `L[1;2;0]` are **not** a list of indices. With `,` or no separators, you'd be indexing the top level with a list.
+
+**Reshape with `0N`**: q works out one dimension
+
+```q
+q)2 0N#til 10                         / 2 rows, columns calculated
+0 1 2 3 4
+5 6 7 8 9
+q)0N 3#til 10                         / 3 per row, rows calculated; the last row may be short
+0 1 2
+3 4 5
+6 7 8
+,9
+```
+
+### 3.9 Indexing with lists
+
+The result has the **same shape as the index**.
+
+```q
+q)L:100 200 300 400
+q)L[0]
+100
+q)L[2]
+300
+q)L[0 2]
+100 300
+q)L[3 2 0 1]                          / any order
+400 300 100 200
+q)L[0 2 0]                            / repeats are fine
+100 300 100
+q)01101011b[0 2 4]
+011b
+q)"beeblebrox"[0 7 8]
+"bro"
+q)I:0 2
+q)L[I]                                / indices held in a variable
+100 300
+q)L[(0 1; 2 3)]                       / nested index → nested result (all from the top level)
+100 200
+300 400
+```
+
+**Assignment with list indices**: processed left to right
+
+```q
+q)L:100 200 300 400
+q)L[0]:100
+q)L
+100 200 300 400
+q)L[1 2 3]:2000 3000 4000
+q)L
+100 2000 3000 4000
+q)L[3 2 1]:999 888 777                / same as L[3]:999; L[2]:888; L[1]:777
+q)L:100 200 300 400
+q)L[0 1 0 3]:1000 2000 3000 4000      / repeated index → the rightmost assignment wins
+q)L
+3000 2000 300 4000
+q)L:100 200 300 400
+q)L[1 3]:999                          / an atom is extended to every index
+q)L
+100 999 300 999
+```
+
+**Juxtaposition**: brackets are optional
+
+```q
+q)L:100 200 300 400
+q)L 0
+100
+q)L[2 1]
+300 200
+q)L 2 1
+300 200
+q)I:2 1
+q)L I
+300 200
+q)L ::
+100 200 300 400
+```
+
+**Find `?`**: the index of the first match (the inverse of indexing)
+
+```q
+q)1001 1002 1003?1002
+1
+q)1001 1002 1003?1004                 / not found → count (one past the end)
+3
+q)1001 1002 1003?1003 1001            / works on a list on the right
+2 0
+```
+
+### 3.10 Elided (omitted) indices
+
+An omitted index means **all** for that position.
+
+```q
+q)m:(1 2 3 4; 100 200 300 400; 1000 2000 3000 4000)
+q)m
+1    2    3    4
+100  200  300  400
+1000 2000 3000 4000
+q)m[1;]                               / row 1
+100 200 300 400
+q)m[;3]                               / column 3
+4 400 4000
+q)m[1;]~m[1]
+1b
+```
+
+**Three levels deep**
+
+```q
+q)L:((1 2 3;4 5 6 7);(`a`b`c`d;`z`y`x`;`0`1`2);("now";"is";"the"))
+q)L
+(1 2 3;4 5 6 7)
+(`a`b`c`d;`z`y`x`;`0`1`2)
+("now";"is";"the")
+q)L[;1;]                              / item 1 of each top-level list
+4 5 6 7
+`z`y`x`
+"is"
+q)L[;;2]                              / item 2 at the second level
+3 6
+`c`x`2
+"w e"
+q)L[0 2;;0 1]                         / rows 0 and 2, items 0 and 1 of every inner list
+(1 2;4 5)
+("no";"is";"th")
+```
+
+- `"w e"`: `"is"` has no index 2, so it gives the char null `" "`.
+- **Style:** keep the trailing `;`. Write `L[;1;]`, not `L[;1]`, and write `L[1]`, not `L[1;;]`.
+
+### 3.11 Rectangular lists and matrices
+
+A **rectangular list** is a list of lists that all have the same count. `flip` transposes it, physically copying the data.
+
+```q
+q)L:(1 2 3; (10 20; 100 200; 1000 2000))
+q)L
+1 2 3
+10 20 100 200 1000 2000
+q)L:(1 2 3; 10 20 30; 100 200 300)
+q)flip L
+1 10 100
+2 20 200
+3 30 300
+q)M:flip L
+q)L[1;2]
+30
+q)M[2;1]                              / flip swaps the first two index positions
+30
+```
+
+**Matrices**: a vector is a dimension-1 matrix, and a matrix of dimension n is a list of same-size matrices of dimension n−1. A vector doesn't have to be numeric.
+
+```q
+q)v1:1 2 3
+q)v2:98.60 99.72 100.34 101.93
+q)v3:`so`long`and`thanks`for`all`the`fish
+q)mm:((1 2;3 4;5 6);(10 20;30 40;50 60))   / a 2×3×2 matrix
+q)mm                                  / the display doesn't show the structure well
+1 2 3 4 5 6
+10 20 30 40 50 60
+q)mm[0]
+1 2
+3 4
+5 6
+q)mm[1]
+10 20
+30 40
+50 60
+q)m:(1 2; 10 20; 100 200; 1000 2000)
+q)m 0 2                               / pick rows 0 and 2
+1   2
+100 200
+```
+
+- `m[i]` = row `i`, `m[;j]` = column `j`, and `m[i][j]` = `m[i;j]`.
+- Stored **row by row**, so rows are fast and columns are slower. A **table** is the reverse: a collection of **columns**. That's why q-sql column operations are fast.
+
+### 3.12 Useful list operations
+
+```q
+q)til 10
+0 1 2 3 4 5 6 7 8 9
+q)1+til 10
+1 2 3 4 5 6 7 8 9 10
+q)2*til 10
+0 2 4 6 8 10 12 14 16 18
+q)1+2*til 10
+1 3 5 7 9 11 13 15 17 19
+q)-5+4*til 3
+-5 -1 3
+q)distinct 1 2 3 2 3 4 6 4 3 5 6       / unique items, in order of first occurrence
+1 2 3 4 6 5
+q)where 101010b                       / indices of the 1s
+0 2 4
+q)L:10 20 30 40 50
+q)L[where L>20]:42                    / update where a condition holds
+q)L
+10 20 42 42 42
+q)group "i miss mississippi"          / item → the indices where it occurs
+i| 0 3 8 11 14 17
+ | 1 6
+m| 2 7
+s| 4 5 9 10 12 13
+p| 15 16
+```
+
+- `f each til count x` is almost always **loop-style code**. Look for a vector version instead.
 "# kdb_q_learning" 
